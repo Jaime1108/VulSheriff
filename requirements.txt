@@ -1,0 +1,26 @@
+# --- Core Web Framework ---
+Flask==3.0.3
+Werkzeug==3.0.2
+Jinja2==3.1.4
+itsdangerous==2.2.0
+click==8.1.7
+
+# --- Environment and Utilities ---
+python-dotenv==1.0.1      # For .env support (API keys, config)
+simplejson==3.19.2        # JSON helper (optional but faster)
+requests==2.32.3          # Needed for API calls (Llamar / Llama / etc.)
+shutilwhich==1.1.0        # Safer file system utilities (optional)
+
+# --- LLM / AI Integration (Llamar API or equivalent) ---
+llamaapi==0.1.36          # Llamar (Llama API) client library
+# or if you are using Ollama locally, comment above and use:
+# ollama==0.1.9
+# If you use LlamaIndex for retrieval-augmented generation later:
+# llama-index==0.11.16
+
+# --- Deployment (optional) ---
+gunicorn==23.0.0          # Production-ready WSGI server
+
+# --- Development Tools (optional) ---
+bandit==1.7.8             # Static security scanner (future feature)
+Flask-SocketIO==5.3.6     # For real-time chat UI (future)
