@@ -24,7 +24,7 @@
     .banner {
       display:flex;
       justify-content:center;
-      background-color:background-color: rgba(139, 69, 19, 0.5);
+      background-color: rgba(139, 69, 19, 0.5);
       border-radius: 5px  10px;
       margin:0px;
     }
@@ -42,6 +42,8 @@
 
     .card-face {
       position: absolute;
+      top: 0;
+      left: 0;
       width: 100%;
       height: 100%;
       backface-visibility: hidden;
@@ -63,10 +65,9 @@
       background: linear-gradient(to bottom, #DEB887 0%, #D2B48C 100%);
       border: 8px solid #8B4513;
       transform: rotateY(180deg);
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
+      padding: 16px;
+      position: relative;
+      display: block;
     }
 
     .wanted-header {
@@ -79,10 +80,7 @@
     }
 
     .dead-or-alive {
-      font-size: 14px;
-      color: #8B4513;
-      margin-bottom: 20px;
-      font-style: italic;
+      display: none;
     }
 
     .vulnerability-name {
@@ -124,16 +122,25 @@
       font-size: 18px;
       font-weight: bold;
       color: #8B0000;
-      margin-top: auto;
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 16px;
+      text-align: center;
+      margin-top: 0;
     }
 
     .suggestion-title {
       font-size: 20px;
       font-weight: bold;
       color: #8B0000;
-      margin-bottom: 15px;
       text-align: center;
       text-decoration: underline;
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      margin-bottom: 0;
     }
 
     .suggestion-text {
@@ -141,20 +148,21 @@
       line-height: 1.5;
       color: #2F1B14;
       background: rgba(255, 255, 255, 0.3);
-      padding: 15px;
-      border-radius: 5px;
       border: 2px dashed #8B4513;
-      overflow-wrap: anywhere;
+      border-radius: 5px;
+      padding: 15px;
+      overflow-y: auto;
       word-break: break-word;
+      overflow-wrap: anywhere;
+      position: absolute;
+      top: 72px;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
     }
 
     .flip-hint {
-      position: absolute;
-      bottom: 10px;
-      right: 15px;
-      font-size: 12px;
-      color: #8B4513;
-      font-style: italic;
+      display: none;
     }
 
     .sheriff-star {

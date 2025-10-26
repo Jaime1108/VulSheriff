@@ -1,0 +1,5 @@
+/* Base placeholder stylesheet to avoid 404s; customize as needed. */
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+}
