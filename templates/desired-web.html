@@ -13,6 +13,15 @@
             background-image: url("{{ url_for('static', filename='background/desert.png') }}");
             background-size: cover;
             background-repeat: no-repeat;
+
+          }
+          .banner {
+            display:flex;
+            justify-content:center;
+            background-color: rgba(139, 69, 19, 0.5);
+            border-radius: 5px  10px;
+            margin:0px;
+          }
         }
         .loading-overlay {
             position: fixed;
@@ -66,7 +75,7 @@
         <!-- Header -->
         <header class="leather-texture border-b-4 border-yellow-600 shadow-lg">
             <div class="max-w-6xl mx-auto px-4 py-6">
-                <div class="flex items-center justify-center space-x-4">
+                <div class="banner">
                     <div class="sheriff-badge w-16 h-16 flex items-center justify-center">
                         <span class="text-2xl">⭐</span>
                     </div>
