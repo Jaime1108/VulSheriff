@@ -40,7 +40,7 @@ logger = setup_logger()
 @app.get("/")
 def index():
     return render_template(
-        "web copy.html",
+        "web.html",
         default_api_key=os.getenv("OPENROUTER_API_KEY", ""),
         max_files=MAX_FILES,
         max_total=format_bytes(MAX_TOTAL_BYTES),

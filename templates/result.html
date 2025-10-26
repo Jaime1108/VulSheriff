@@ -1,4 +1,4 @@
-{% extends 'base.html' %}
+{% extends 'web.html' %}
 {% block content %}
 
 <div class="row g-3">
@@ -10,7 +10,8 @@
           <li><strong>Files Included:</strong> {{ files_included }} / {{ max_files }}</li>
           <li><strong>Text Size:</strong> {{ text_size }}</li>
           <li><strong>Model:</strong> {{ model }}</li>
-          <li><strong>Temperature:</strong> {{ '%.1f'|format(temperature) }}</li>
+
+
           <li><strong>Elapsed:</strong> {{ elapsed }}</li>
         </ul>
       </div>
