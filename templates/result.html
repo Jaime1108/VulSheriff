@@ -1,65 +1,243 @@
-{% extends 'web.html' %}
-{% block content %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VulSheriff - Vulnerability Bounty Hunter</title>
+  <link rel="icon" href="{{url_for('static', filename="icon/logo.png")}}" type="image/png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  <style>
+    html {
+      
+    }
+    body {
+      background-image: url("{{ url_for('static', filename='background/desert.png') }}");
+      background-size: cover;
+      background-repeat: no-repeat;
 
-<div class="row g-3">
-  <div class="col-md-3">
-    <div class="card">
-      <div class="card-body">
-        <h6 class="card-title">Request Summary</h6>
-        <ul class="list-unstyled mb-0">
-          <li><strong>Files Included:</strong> {{ files_included }} / {{ max_files }}</li>
-          <li><strong>Text Size:</strong> {{ text_size }}</li>
-          <li><strong>Model:</strong> {{ model }}</li>
+    }
+    /* Western flip card style (from wanted poster) */
+    .wanted-poster {
+      width: 350px;
+      height: 500px;
+      perspective: 1000px;
+      cursor: pointer;
+    }
 
+    .card {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 0.8s ease;
+    }
 
-          <li><strong>Elapsed:</strong> {{ elapsed }}</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-9">
-    <div class="card mb-3">
-      <div class="card-body">
-        <h6 class="card-title">OpenRouter Response</h6>
-        {% if content %}
-          <div class="border rounded p-2" style="background:#f8f9fa;">
-            <pre>{{ content }}</pre>
+    .wanted-poster:hover .card {
+      transform: rotateY(180deg);
+    }
+
+    .card-face {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      backface-visibility: hidden;
+      border-radius: 8px;
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+    }
+
+    .front {
+      background: linear-gradient(to bottom, #F5DEB3 0%, #DEB887 100%);
+      border: 8px solid #8B4513;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .back {
+      background: linear-gradient(to bottom, #DEB887 0%, #D2B48C 100%);
+      border: 8px solid #8B4513;
+      transform: rotateY(180deg);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .wanted-header {
+      font-size: 32px;
+      font-weight: bold;
+      color: #8B0000;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+      margin-bottom: 10px;
+      letter-spacing: 2px;
+    }
+
+    .dead-or-alive {
+      font-size: 14px;
+      color: #8B4513;
+      margin-bottom: 20px;
+      font-style: italic;
+    }
+
+    .vulnerability-name {
+      font-size: 24px;
+      font-weight: bold;
+      color: #000;
+      margin-bottom: 15px;
+      text-decoration: underline;
+    }
+
+    .severity-badge {
+      display: inline-block;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-weight: bold;
+      font-size: 14px;
+      margin-bottom: 20px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .critical { background: #DC143C; color: white; }
+    .high { background: #E67300; color: white; }
+    .medium { background: #FFD700; color: #000; }
+    .low { background: #6B8E23; color: white; }
+
+    .description {
+      font-size: 16px;
+      line-height: 1.4;
+      color: #2F1B14;
+      margin-bottom: 20px;
+      text-align: left;
+    }
+
+    .reward {
+      font-size: 18px;
+      font-weight: bold;
+      color: #8B0000;
+      margin-top: auto;
+    }
+
+    .suggestion-title {
+      font-size: 20px;
+      font-weight: bold;
+      color: #8B0000;
+      margin-bottom: 15px;
+      text-align: center;
+      text-decoration: underline;
+    }
+
+    .suggestion-text {
+      font-size: 14px;
+      line-height: 1.5;
+      color: #2F1B14;
+      background: rgba(255, 255, 255, 0.3);
+      padding: 15px;
+      border-radius: 5px;
+      border: 2px dashed #8B4513;
+    }
+
+    .flip-hint {
+      position: absolute;
+      bottom: 10px;
+      right: 15px;
+      font-size: 12px;
+      color: #8B4513;
+      font-style: italic;
+    }
+
+    .sheriff-star {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      font-size: 24px;
+      color: #FFD700;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+    }
+  </style>
+</head>
+
+<body class="western-bg min-h-full">
+  <div class="min-h-full">
+    <!-- Header -->
+    <header class="leather-texture border-b-4 border-yellow-600 shadow-lg">
+      <div class="max-w-6xl mx-auto px-4 py-6">
+        <div class="flex items-center justify-center space-x-4">
+          <div class="sheriff-badge w-16 h-16 flex items-center justify-center">
+            <span class="text-2xl">⭐</span>
           </div>
-        {% else %}
-          <pre>{{ response_json | tojson(indent=2) }}</pre>
-        {% endif %}
+          <div class="text-center">
+            <h1 class="cowboy-font text-4xl md:text-6xl text-yellow-300 drop-shadow-lg">
+              Site Sheriff
+            </h1>
+            <p class="text-yellow-200 text-lg md:text-xl font-bold">
+              🤠 Vulnerability Bounty Hunter 🤠
+            </p>
+          </div>
+          <div class="sheriff-badge w-16 h-16 flex items-center justify-center">
+            <span class="text-2xl">⭐</span>
+          </div>
+        </div>
       </div>
-    </div>
+    </header>
 
-    {% if parsed_json %}
-    <div class="card mb-3">
-      <div class="card-body">
-        <h6 class="card-title">Parsed Findings (JSON)</h6>
-        <pre>{{ parsed_json | tojson(indent=2) }}</pre>
+    <!-- Main Content -->
+    <main class="max-w-6xl mx-auto px-4 py-8">
+      <!-- Welcome Message -->
+      <div class="rope-border bg-amber-50 p-6 mb-8 shadow-xl text-center">
+        <h2 class="cowboy-font text-3xl text-amber-900 mb-4">
+          🎯 Howdy, Partner! 🎯
+        </h2>
+        <p class="text-amber-800 text-lg">
+          Welcome to VulSheriff's AI-powered vulnerability hunting station! 
+          Drop your code or describe your security concerns, and I'll help you track down those pesky bugs faster than a tumbleweed in a tornado!
+        </p>
       </div>
-    </div>
-    {% endif %}
 
-    <div class="card">
-      <div class="card-body">
-        <h6 class="card-title">Packaged File Context (preview)</h6>
-        <pre>{{ packaged_preview }}</pre>
+      <!-- Findings Grid -->
+      {% block content %}
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 justify-items-center">
+        {% for f in findings %}
+        <div class="wanted-poster">
+          <div class="card">
+            <!-- Front -->
+            <div class="card-face front">
+              <div class="sheriff-star">⭐</div>
+              <div class="wanted-header">WANTED</div>
+              <div class="dead-or-alive">DEAD OR PATCHED</div>
+              <div class="vulnerability-name">{{ f.title }}</div>
+              <div class="severity-badge {{ f.severity|lower }}">
+                {{ f.severity }}
+              </div>
+              <div class="description">{{ f.description }}</div>
+              <div class="reward">REWARD: SECURE CODE</div>
+              <div class="flip-hint">Hover to see bounty details</div>
+            </div>
+
+            <!-- Back -->
+            <div class="card-face back">
+              <div class="suggestion-title">BOUNTY INSTRUCTIONS</div>
+              <div class="suggestion-text">
+                <strong>How to Capture This Outlaw:</strong><br><br>
+                {{ f.suggestion }}
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
       </div>
-    </div>
-    {% if debug_mode and debug_details %}
-    <div class="card mt-3">
-      <div class="card-body">
-        <h6 class="card-title">Debug Details</h6>
-        <pre>{{ debug_details | tojson(indent=2) }}</pre>
-      </div>
-    </div>
-    {% endif %}
+      {% endblock %}
+
+      <!-- Footer -->
+      <footer class="mt-12 text-center">
+        <p class="text-amber-200 text-sm">
+          🛡️ Powered by AI • Securing the digital frontier one vulnerability at a time • 🛡️
+        </p>
+      </footer>
+    </main>
   </div>
-</div>
-
-<div class="mt-3">
-  <a class="btn btn-secondary" href="{{ url_for('index') }}">Run another analysis</a>
-  <a class="btn btn-outline-secondary" href="{{ url_for('index') }}#" onclick="history.back();return false;">Back</a>
-  </div>
-
-{% endblock %}
+</body>
+</html>

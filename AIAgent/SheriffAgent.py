@@ -29,7 +29,7 @@ if not logger.handlers:
 # PROMPT TEMPLATE
 # ---------------------------------------------------------------------
 VULN_PROMPT = (
-    "You are VulnSherif, an expert application security auditor. "
+    "You are VulnSheriff, an expert application security auditor. "
     "Analyze the provided website/application source code for security vulnerabilities, "
     "misconfigurations, insecure defaults, and risky patterns. Prioritize actionable, accurate findings.\n\n"
     "Guidelines:\n"
@@ -39,25 +39,19 @@ VULN_PROMPT = (
     "- Prefer minimal, targeted fixes.\n"
     "- If context is insufficient, state assumptions and offer validation steps.\n\n"
     "Output Formatting:\n"
-    "1) A concise executive summary.\n"
-    "2) A JSON block with the following shape (keep it compact):\n"
+    "A JSON block with the following shape (keep it compact):\n"
     "{\n"
     "\"summary\": \"...\",\n"
     "\"findings\": [\n"
     "  {\n"
     "    \"title\": \"...\",\n"
     "    \"severity\": \"Critical|High|Medium|Low\",\n"
-    "    \"cwe\": \"CWE-XXX (name)\",\n"
-    "    \"owasp\": \"AXX (name)\",\n"
-    "    \"files\": [\"path1\", \"path2\"],\n"
-    "    \"description\": \"...\",\n"
-    "    \"evidence\": \"short snippet or reference\",\n"
-    "    \"remediation\": \"specific steps\",\n"
-    "    \"patch\": \"unified diff or code block if feasible\"\n"
+    "    \"description\": \"super short description (1-2 sentence)\",\n"
+    "    \"suggestion\": \"specific steps (3-4 sentences)\",\n"
     "  }\n"
     "]\n"
     "}\n"
-    "3) Then a human-readable detailed report."
+
 )
 
 # ---------------------------------------------------------------------

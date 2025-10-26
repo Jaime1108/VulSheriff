@@ -1,8 +1,6 @@
 import os
 import io
 import json
-import time
-import uuid
 import zipfile
 import shutil
 import tempfile
@@ -40,7 +38,7 @@ logger = setup_logger()
 @app.get("/")
 def index():
     return render_template(
-        "web copy.html",
+        "web.html",
         default_api_key=os.getenv("OPENROUTER_API_KEY", ""),
         max_files=MAX_FILES,
         max_total=format_bytes(MAX_TOTAL_BYTES),
@@ -90,10 +88,11 @@ def analyze():
         agent = VulnSheriffAgent()
         response_json = agent.invoke(user_context)
         content = response_json.get("choices", [{}])[0].get("message", {}).get("content", "")
+        findings = json.loads(content).get("findings", [])
         print("Agent is called")
         return render_template(
             "result.html",
-            content=content,
+            findings=findings,
             files_included=len(files),
             #model=model from AIAgent.SheriffAgent,
             text_size=format_bytes(sum(f["size"] for f in files)),

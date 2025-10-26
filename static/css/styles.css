@@ -1,5 +1,6 @@
 body {
     box-sizing: border-box;
+    ;
 }
 
 @import url('https://fonts.googleapis.com/css2?family=Rye:wght@400&family=Creepster:wght@400&display=swap');
@@ -57,4 +58,10 @@ body {
     border: 3px dashed #D2691E;
     border-radius: 18px;
     z-index: -1;
+}
+.card{
+    border-radius: 5px 10px;
+}
+.card:hover{
+    
 }

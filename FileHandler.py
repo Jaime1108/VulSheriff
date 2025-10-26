@@ -55,6 +55,8 @@ def format_bytes(n: int) -> str:
         n /= 1024.0
     return f"{n:.1f}TB"
 
+
+
 def collect_files(root_dir: str) -> Tuple[List[Dict], int, int]:
     """Collect and read text files from extracted ZIP."""
     selected, total_bytes, file_count = [], 0, 0
@@ -89,6 +91,9 @@ def collect_files(root_dir: str) -> Tuple[List[Dict], int, int]:
         if file_count >= MAX_FILES or total_bytes >= MAX_TOTAL_BYTES:
             break
     return selected, file_count, total_bytes
+
+
+
 
 def format_files_for_prompt(files: List[Dict]) -> str:
     """Format the collected files into a text block for the AI model."""

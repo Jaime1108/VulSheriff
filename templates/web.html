@@ -3,11 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VulSheriff - Vulnerability Bounty Hunter</title>
+    <link rel="icon" href="{{url_for('static', filename="icon/logo.png")}}" type="image/png">
+
+    <title>Site Sheriff - Vulnerability Bounty Hunter</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <style>
-    
+        body {
+            background-image: url("{{ url_for('static', filename='background/desert.png') }}");
+            background-size: cover;
+            background-repeat: no-repeat;
+
+          }
+        .banner{
+            display: flex;
+            justify-content:center;
+            margin: 0;
+            background-color: rgba(139, 69, 19, 0.5);
+            border-radius: 10px 5px;
+          }
     </style>
 </head>
 <body class="western-bg min-h-full">
@@ -15,13 +29,13 @@
         <!-- Header -->
         <header class="leather-texture border-b-4 border-yellow-600 shadow-lg">
             <div class="max-w-6xl mx-auto px-4 py-6">
-                <div class="flex items-center justify-center space-x-4">
+                <div class="banner">
                     <div class="sheriff-badge w-16 h-16 flex items-center justify-center">
                         <span class="text-2xl">⭐</span>
                     </div>
                     <div class="text-center">
                         <h1 class="cowboy-font text-4xl md:text-6xl text-yellow-300 drop-shadow-lg">
-                            VulSheriff
+                            Site Sheriff
                         </h1>
                         <p class="text-yellow-200 text-lg md:text-xl font-bold">
                             🤠 Vulnerability Bounty Hunter 🤠
@@ -70,19 +84,7 @@
                 </div>
 
                 <!-- Chat Messages Area -->
-                <div id="chatMessages" class="h-96 overflow-y-auto p-6 space-y-4 bg-gradient-to-b from-amber-50 to-white">
-                    <div class="chat-bubble flex items-start space-x-3">
-                        <div class="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center flex-shrink-0">
-                            <span class="text-sm">🤖</span>
-                        </div>
-                        <div class="bg-amber-100 rounded-lg p-4 max-w-md border-2 border-amber-200">
-                            <p class="text-amber-900">
-                                <strong>Howdy there, partner! 🤠</strong><br>
-                                I'm your AI vulnerability sheriff. Upload a file or describe your security concerns, and I'll help you hunt down those bugs! What can I investigate for you today?
-                            </p>
-                        </div>
-                    </div>
-                </div>
+    
                 {% block content %}
                 <!-- Input Form -->
                 <form id="chatForm" action="{{ url_for('analyze') }}" method="post" enctype="multipart/form-data" class="border-t-2 border-amber-200 p-6 bg-amber-25">
@@ -155,20 +157,11 @@
             </div>
         </main>
     </div>
-
     <script>
-        const chatMessages = document.getElementById('chatMessages');
-        const chatForm = document.getElementById('chatForm');
-        const messageInput = document.getElementById('messageInput');
         const fileInput = document.getElementById('fileInput');
         const fileInfo = document.getElementById('fileInfo');
         const fileName = document.getElementById('fileName');
         const removeFile = document.getElementById('removeFile');
-        const submitBtn = document.getElementById('submitBtn');
-
-        let selectedFile = null;
-
-        // File upload handling
         fileInput.addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (file) {
@@ -184,114 +177,5 @@
             fileInput.value = '';
             fileInfo.classList.add('hidden');
         });
-        chatForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-        
-            const message = messageInput.value.trim();
-            const file = fileInput.files[0];
-        
-            if (!message && !file) return;
-        
-            // Show user message
-            addMessage(message || "I've uploaded a file for analysis.", true, !!file);
-        
-            // Build form data
-            const formData = new FormData();
-            formData.append("notes", message);       // matches request.form.get("notes")
-            if (file) formData.append("zip_file", file); // matches request.files.get("zip_file")
-        
-            // Send to Flask endpoint
-            addMessage("⏳ Sending to the sheriff's office for analysis...", false);
-        
-            const response = await fetch("{{ url_for('analyze') }}", {
-                method: "POST",
-                body: formData
-            });
-        
-            const data = await response.text();  // Flask can return plain text
-            addMessage(data, false);  // Show Flask’s actual response
-        });
-        
-        // Add message to chat
-        /*
-        function addMessage(content, isUser = false, hasFile = false) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `chat-bubble flex items-start space-x-3 ${isUser ? 'flex-row-reverse space-x-reverse' : ''}`;
-            
-            const avatar = isUser ? '🤠' : '🤖';
-            const bgColor = isUser ? 'bg-blue-100 border-blue-200' : 'bg-amber-100 border-amber-200';
-            const textColor = isUser ? 'text-blue-900' : 'text-amber-900';
-            
-            messageDiv.innerHTML = `
-                <div class="w-8 h-8 ${isUser ? 'bg-blue-500' : 'bg-amber-500'} rounded-full flex items-center justify-center flex-shrink-0">
-                    <span class="text-sm">${avatar}</span>
-                </div>
-                <div class="${bgColor} rounded-lg p-4 max-w-md border-2">
-                    ${hasFile ? `<div class="mb-2 text-xs ${textColor} opacity-75">📎 File attached: ${selectedFile.name}</div>` : ''}
-                    <p class="${textColor}">${content}</p>
-                </div>
-            `;
-            
-            chatMessages.appendChild(messageDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-
-        // Simulate AI response
-        function simulateAIResponse(userMessage, hasFile) {
-            const responses = [
-                "🔍 Well howdy! I've analyzed your request and I'm ready to help hunt down those vulnerabilities. Let me investigate this for you...",
-                "🎯 Partner, I see what you're getting at! Based on what you've shared, here are some potential security concerns to watch out for...",
-                "🛡️ Great question, sheriff! Security is mighty important, and I've got some insights that might help you secure that digital frontier...",
-                "🤠 Now that's what I call good security thinking! Let me break down what I found and give you some recommendations...",
-                "⚡ Hot diggity! I've spotted some areas that need attention. Here's what this old AI sheriff recommends..."
-            ];
-            
-            const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-            
-            setTimeout(() => {
-                addMessage(randomResponse);
-                
-                // Add a follow-up technical response
-                setTimeout(() => {
-                    const technicalResponse = hasFile 
-                        ? "📋 I've processed your uploaded file and found several areas to investigate. The code structure looks solid, but I'd recommend checking for input validation, authentication mechanisms, and potential injection vulnerabilities. Would you like me to dive deeper into any specific area?"
-                        : "💡 Based on your description, I'd suggest focusing on common vulnerability patterns like SQL injection, XSS, CSRF, and authentication bypasses. Each of these can be like hidden rattlesnakes in your code! Want me to explain any of these in more detail?";
-                    
-                    addMessage(technicalResponse);
-                }, 1500);
-            }, 1000);
-        }
-
-        // Form submission
-        chatForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const message = messageInput.value.trim();
-            if (!message && !selectedFile) {
-                return;
-            }
-            
-            // Add user message
-            const userContent = message || "I've uploaded a file for analysis.";
-            addMessage(userContent, true, !!selectedFile);
-            
-            // Simulate AI response
-            simulateAIResponse(message, !!selectedFile);
-            
-            // Reset form
-            messageInput.value = '';
-            if (selectedFile) {
-                selectedFile = null;
-                fileInput.value = '';
-                fileInfo.classList.add('hidden');
-            }
-        });
-        */
-        // Auto-resize textarea
-        messageInput.addEventListener('input', function() {
-            this.style.height = 'auto';
-            this.style.height = this.scrollHeight + 'px';
-        });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'99459603d3982d41',t:'MTc2MTQzNTkwOS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
-</html>
+    </html>
