@@ -1,0 +1,272 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="progress-shell">
+  <div class="progress-card">
+    {% if error %}
+      <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+    <h2 class="mb-2">Security Scan Running</h2>
+    <p class="text-muted mb-4">Hang tight while we review each file. Progress updates will appear in real time.</p>
+    <div class="overall-status">
+      <div class="status-label">Current Status</div>
+      <div class="status-value" id="job-status">Queued…</div>
+    </div>
+    <div class="progress-bar-wrapper">
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="progress-bar-fill" style="width:0%;"></div>
+      </div>
+      <div class="progress-bar-text" id="progress-bar-text">0 / 0 files analyzed</div>
+    </div>
+    <div class="spinner-text" id="spinner-text">Initializing analysis…</div>
+    <ul class="file-progress-list" id="file-progress-list"></ul>
+    <div class="footer-note text-muted">You can keep this tab open; we’ll redirect to the report once the job is finished.</div>
+  </div>
+</div>
+
+<style>
+.progress-shell {
+  max-width: 720px;
+  margin: 0 auto;
+}
+.progress-card {
+  background: rgba(19, 28, 50, 0.9);
+  border: 1px solid rgba(122, 0, 255, 0.2);
+  border-radius: 18px;
+  padding: 32px;
+  box-shadow: 0 24px 48px rgba(5, 7, 15, 0.45);
+}
+.overall-status {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 20px;
+}
+.status-label {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.status-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #eef2ff;
+}
+.progress-bar-wrapper {
+  margin-bottom: 16px;
+}
+.progress-bar-track {
+  width: 100%;
+  height: 12px;
+  background: rgba(148, 163, 184, 0.18);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7a00ff, #d000ff);
+  transition: width 0.4s ease;
+}
+.progress-bar-text {
+  margin-top: 6px;
+  font-size: 0.9rem;
+  color: #c7d2fe;
+}
+.spinner-text {
+  font-size: 0.95rem;
+  color: #a5b4fc;
+  margin-bottom: 18px;
+  min-height: 20px;
+}
+.file-progress-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.file-progress-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 0.92rem;
+  color: #eef2ff;
+}
+.file-progress-list li .badge {
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.badge-running { background: rgba(122, 0, 255, 0.24); color: #e0d4ff; }
+.badge-success { background: rgba(76, 175, 80, 0.25); color: #d1ffda; }
+.badge-error { background: rgba(208, 0, 0, 0.25); color: #ffb4b4; }
+.badge-waiting { background: rgba(255, 193, 7, 0.28); color: #fff1b8; }
+.footer-note {
+  margin-top: 24px;
+  font-size: 0.85rem;
+}
+@media (max-width: 768px) {
+  .progress-card { padding: 24px 18px; }
+}
+</style>
+
+<script>
+(function(){
+  const reqId = "{{ req_id }}";
+  const statusEl = document.getElementById('job-status');
+  const progressFill = document.getElementById('progress-bar-fill');
+  const progressText = document.getElementById('progress-bar-text');
+  const fileList = document.getElementById('file-progress-list');
+  const spinnerText = document.getElementById('spinner-text');
+  const spinnerMessages = [
+    'Gathering evidence from source files…',
+    'Enumerating attack surface…',
+    'Cross-referencing CVEs and CVSS scores…',
+    'Synthesizing prioritized remediation plan…',
+    'Validating severity rankings…',
+    'Double-checking context for false positives…'
+  ];
+  let spinnerIdx = 0;
+  const jobFailed = {{ 'true' if error else 'false' }};
+
+  function cycleSpinner(){
+    spinnerIdx = (spinnerIdx + 1) % spinnerMessages.length;
+    spinnerText.textContent = spinnerMessages[spinnerIdx];
+  }
+  let spinnerInterval = null;
+  if (jobFailed) {
+    statusEl.textContent = 'Job failed';
+    spinnerText.textContent = {{ (error or 'Job failed.')|tojson }};
+    progressFill.style.width = '0%';
+    progressText.textContent = '0 / 0 files analyzed';
+    return;
+  } else {
+    spinnerInterval = setInterval(cycleSpinner, 3500);
+  }
+
+  const fileStatus = new Map();
+
+  function badgeClass(state) {
+    if (state === 'success' || state === 'completed') return 'badge-success';
+    if (state === 'error' || state === 'failed') return 'badge-error';
+    if (state === 'waiting') return 'badge-waiting';
+    return 'badge-running';
+  }
+
+  function renderFileList() {
+    fileList.innerHTML = '';
+    const entries = Array.from(fileStatus.entries());
+    entries.sort((a, b) => a[0].localeCompare(b[0]));
+    entries.forEach(([path, info]) => {
+      const li = document.createElement('li');
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = path;
+      const badge = document.createElement('span');
+      badge.className = 'badge ' + badgeClass(info.state);
+      badge.textContent = info.label;
+      li.appendChild(nameSpan);
+      li.appendChild(badge);
+      fileList.appendChild(li);
+    });
+  }
+
+  async function poll(){
+    try{
+      const res = await fetch(`/status/${reqId}?t=${Date.now()}`);
+      if(!res.ok){
+        statusEl.textContent = 'Unable to contact status endpoint.';
+        setTimeout(poll, 3000);
+        return;
+      }
+      const data = await res.json();
+      const status = data.status || 'running';
+      statusEl.textContent = status === 'running' ? 'Analyzing files…' :
+                             status === 'waiting' ? 'Cooling off for rate limits…' :
+                             status === 'completed' ? 'Finalizing report…' :
+                             status === 'failed' ? 'Job failed' :
+                             status;
+      const targets = data.targets || 0;
+      let completed = 0;
+      let waitingDetail = null;
+      (data.progress || []).forEach(entry => {
+        const stage = entry.stage || '';
+        const detail = entry.detail || '';
+        if (stage.startsWith('file-progress')) {
+          const parts = detail.split(' ');
+          if (parts.length >= 2) {
+            const counts = parts[0].split('/');
+            if (counts.length === 2) {
+              completed = parseInt(counts[0], 10) || completed;
+            }
+          }
+        } else if (stage.startsWith('file:')) {
+          const path = stage.slice(5);
+          const info = fileStatus.get(path) || {state:'running', label:'running'};
+          if (entry.detail) {
+            info.label = entry.detail;
+          }
+          const entryState = entry.state || 'running';
+          if (entryState) {
+            info.state = entryState;
+          } else if (data.status === 'running') {
+            info.state = 'running';
+          }
+          if (info.state === 'success') {
+            info.label = 'done';
+          } else if (info.state === 'error') {
+            info.label = 'error';
+          } else if (info.state === 'waiting') {
+            info.label = 'waiting';
+            waitingDetail = entry.detail || 'Cooling off for rate limits…';
+          } else {
+            info.label = info.label || 'running';
+          }
+          fileStatus.set(path, info);
+        }
+      });
+
+      const totalRaw = targets || fileStatus.size || 0;
+      const safeTotal = totalRaw || 1;
+      const cappedCompleted = Math.min(completed, safeTotal);
+      const pct = Math.min(100, Math.round((cappedCompleted / safeTotal) * 100));
+      progressFill.style.width = pct + '%';
+      progressText.textContent = `${cappedCompleted} / ${totalRaw} files analyzed`;
+      renderFileList();
+
+      if (status === 'completed') {
+        clearInterval(spinnerInterval);
+        spinnerText.textContent = 'Wrapping up…';
+        setTimeout(() => window.location.href = `/result/${reqId}`, 1000);
+        return;
+      }
+      if (status === 'failed') {
+        clearInterval(spinnerInterval);
+        spinnerText.textContent = data.error || 'Job failed. Please retry.';
+        return;
+      }
+      if (status === 'waiting') {
+        if (spinnerInterval) {
+          clearInterval(spinnerInterval);
+          spinnerInterval = null;
+        }
+        spinnerText.textContent = waitingDetail || 'Cooling off for rate limits…';
+      } else if (!spinnerInterval) {
+        spinnerInterval = setInterval(cycleSpinner, 3500);
+      }
+      setTimeout(poll, 2500);
+    } catch(err){
+      console.error('poll error', err);
+      setTimeout(poll, 3000);
+    }
+  }
+  poll();
+})();
+</script>
+{% endblock %}
