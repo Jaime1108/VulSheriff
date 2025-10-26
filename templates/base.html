@@ -9,15 +9,29 @@
     body { padding-top: 32px; }
     pre { white-space: pre-wrap; word-wrap: break-word; }
     code { white-space: pre-wrap; }
+
+    /* Full-screen loading overlay */
+    #loading-overlay {
+      position: fixed; inset: 0; background: rgba(255,255,255,.88);
+      display: none; align-items: center; justify-content: center;
+      z-index: 2000; backdrop-filter: blur(2px);
+    }
+    #loading-box { text-align: center; }
+    .spinner-ring {
+      width: 64px; height: 64px; border: 6px solid #cfe2ff;
+      border-top-color: #0d6efd; border-radius: 50%;
+      animation: spin 1s linear infinite; margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
   {% block head %}{% endblock %}
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>V</text></svg>">
   <meta name="robots" content="noindex,nofollow">
   <meta http-equiv="Cache-control" content="no-cache">
 </head>
 <body>
   <div class="container">
-    <h1 class="mb-3">🛡️ VulnSherif — Local Code Security Auditor</h1>
+    <h1 class="mb-3">VulnSherif &mdash; Local Code Security Auditor</h1>
     {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
       <div class="mt-2">
@@ -32,6 +46,33 @@
     <p class="text-muted">Tip: set OPENROUTER_API_KEY in your environment. The app includes only selected text files and truncates large ones to manage token budgets.</p>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Loading overlay root -->
+  <div id="loading-overlay" aria-hidden="true">
+    <div id="loading-box" class="p-4 bg-white border rounded shadow">
+      <div class="spinner-ring" role="status" aria-label="Loading"></div>
+      <div class="fw-semibold mb-1">LLM is thinking...</div>
+      <div class="text-muted" style="font-size: 0.95rem;">Please wait while we analyze your input.</div>
+    </div>
+  </div>
+  <script>
+    (function(){
+      function showOverlay(){
+        var el = document.getElementById('loading-overlay');
+        if (el) { el.style.display = 'flex'; }
+      }
+      document.addEventListener('DOMContentLoaded', function(){
+        document.querySelectorAll('form.show-loading-on-submit').forEach(function(f){
+          f.addEventListener('submit', function(){
+            showOverlay();
+            var btn = f.querySelector("button[type='submit']");
+            if (btn) { btn.disabled = true; btn.classList.add('disabled'); }
+          });
+        });
+        document.querySelectorAll('[data-loading]')
+          .forEach(function(el){ el.addEventListener('click', showOverlay); });
+      });
+    })();
+  </script>
 </body>
 </html>
 

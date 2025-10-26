@@ -1,2 +1,0 @@
-# VulSheriff
-RowdyHack Project

@@ -8,6 +8,10 @@ import shutil
 import tempfile
 import logging
 from typing import List, Tuple, Dict
+import sys
+from dotenv import load_dotenv
+from pathlib import Path
+from getpass import getpass
 
 import requests
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
@@ -16,16 +20,25 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 # ----------------------------
 # FLASK APP CONFIG
 # ----------------------------
+# Load environment variables from a local .env file if present
+# Load default search locations (CWD)
+load_dotenv()
+# Also explicitly load .env located next to this file (script directory)
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
+
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change")
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64MB upload cap
+app.config["OPENROUTER_API_KEY"] = os.environ.get("OPENROUTER_API_KEY", "")
 
 
 # ----------------------------
 # CONSTANTS
 # ----------------------------
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_MODEL = "openrouter/auto"
+# Force a specific model (handled purely backend)
+FORCED_MODEL = "qwen/qwen3-coder:free"
+DEFAULT_TEMPERATURE = 0.2
 MAX_TOTAL_BYTES = 2_000_000
 MAX_FILE_BYTES = 100_000
 MAX_FILES = 120
@@ -56,6 +69,78 @@ def setup_logger():
 
 
 logger = setup_logger()
+if app.config.get("OPENROUTER_API_KEY"):
+    logger.info("Detected OPENROUTER_API_KEY from environment/.env")
+else:
+    logger.warning("OPENROUTER_API_KEY not set; will prompt on first run and store securely in user config.")
+
+
+# ----------------------------
+# FIRST-RUN API KEY SETUP
+# ----------------------------
+def get_config_dir() -> Path:
+    """Return a per-user config dir to store secrets (not in repo)."""
+    if os.name == "nt":
+        base = os.getenv("LOCALAPPDATA") or os.getenv("APPDATA") or str(Path.home())
+        return Path(base) / "VulnSherif"
+    # POSIX
+    return Path(os.getenv("XDG_CONFIG_HOME", Path.home() / ".config")) / "vulnsherif"
+
+
+def config_path() -> Path:
+    return get_config_dir() / "config.json"
+
+
+def load_saved_api_key() -> str:
+    try:
+        cfg_file = config_path()
+        if cfg_file.is_file():
+            data = json.loads(cfg_file.read_text(encoding="utf-8"))
+            key = data.get("OPENROUTER_API_KEY", "")
+            if key:
+                return key
+    except Exception:
+        pass
+    return ""
+
+
+def save_api_key_secure(key: str) -> None:
+    try:
+        cfg_dir = get_config_dir()
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        cfg = {"OPENROUTER_API_KEY": key}
+        p = cfg_dir / "config.json"
+        p.write_text(json.dumps(cfg), encoding="utf-8")
+    except Exception as e:
+        logger.warning(f"Failed to save API key: {e}")
+
+
+def ensure_api_key_interactive():
+    """Ensure we have an API key: env -> saved config -> interactive prompt."""
+    # 1) Env/app config
+    key = app.config.get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY", "")
+    if key:
+        return key
+    # 2) Saved config
+    key = load_saved_api_key()
+    if key:
+        app.config["OPENROUTER_API_KEY"] = key
+        os.environ["OPENROUTER_API_KEY"] = key
+        logger.info("Loaded OPENROUTER_API_KEY from user config")
+        return key
+    # 3) Prompt user once
+    try:
+        print("OpenRouter API key not found.")
+        key = getpass("Enter your OpenRouter API key (input hidden): ").strip()
+    except Exception:
+        key = input("Enter your OpenRouter API key: ").strip()
+    if not key:
+        raise RuntimeError("No API key provided")
+    app.config["OPENROUTER_API_KEY"] = key
+    os.environ["OPENROUTER_API_KEY"] = key
+    save_api_key_secure(key)
+    logger.info("Saved API key to user config directory")
+    return key
 def format_bytes(n: int) -> str:
     for unit in ["B", "KB", "MB", "GB"]:
         if n < 1024.0:
@@ -244,8 +329,6 @@ def try_extract_json_block(text: str):
 def index():
     return render_template(
         "index.html",
-        default_api_key=os.getenv("OPENROUTER_API_KEY", ""),
-        default_model=DEFAULT_MODEL,
         max_files=MAX_FILES,
         max_total=format_bytes(MAX_TOTAL_BYTES),
         max_file=format_bytes(MAX_FILE_BYTES),
@@ -254,13 +337,10 @@ def index():
 
 @app.post("/analyze")
 def analyze():
-    api_key = request.form.get("api_key") or os.getenv("OPENROUTER_API_KEY", "")
-    model = request.form.get("model") or DEFAULT_MODEL
+    api_key = app.config.get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY", "")
+    model = FORCED_MODEL
     notes = request.form.get("notes") or ""
-    try:
-        temperature = float(request.form.get("temperature", 0.2))
-    except ValueError:
-        temperature = 0.2
+    temperature = DEFAULT_TEMPERATURE
 
     prompt_only = bool(request.form.get("prompt_only"))
     debug_mode = bool(request.form.get("debug")) or bool(os.getenv("VULNSHERIF_DEBUG"))
@@ -395,6 +475,13 @@ def health():
 
 
 if __name__ == "__main__":
+    # Prompt on first run to capture and save API key (avoid double prompt on reloader)
+    if not os.getenv("WERKZEUG_RUN_MAIN"):
+        try:
+            ensure_api_key_interactive()
+        except Exception as e:
+            print(f"Failed to initialize API key: {e}")
+            sys.exit(1)
     port = int(os.getenv("PORT", "5000"))
     debug_flag = bool(os.getenv("FLASK_DEBUG")) or bool(os.getenv("VULNSHERIF_DEBUG"))
     app.run(host="127.0.0.1", port=port, debug=debug_flag)
