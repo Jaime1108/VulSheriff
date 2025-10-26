@@ -13,18 +13,55 @@
             background-image: url("{{ url_for('static', filename='background/desert.png') }}");
             background-size: cover;
             background-repeat: no-repeat;
-
-          }
-          .banner {
-            display:flex;
-            justify-content:center;
-            background-color:background-color: rgba(139, 69, 19, 0.5);
-            border-radius: 5px  10px;
-            margin:0px;
-          }
+        }
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.65);
+            z-index: 10000;
+        }
+        .loading-overlay.active {
+            display: flex;
+        }
+        .loading-box {
+            background: rgba(245, 222, 179, 0.95);
+            border: 3px solid #8B4513;
+            border-radius: 12px;
+            padding: 32px 40px;
+            text-align: center;
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+            max-width: 320px;
+        }
+        .loading-spinner {
+            width: 48px;
+            height: 48px;
+            border: 6px solid rgba(139, 69, 19, 0.2);
+            border-top-color: #B8860B;
+            border-radius: 50%;
+            margin: 0 auto 18px auto;
+            animation: spin 1s linear infinite;
+        }
+        .loading-box p {
+            font-size: 16px;
+            color: #5C2C0C;
+            font-weight: bold;
+            letter-spacing: 0.8px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="western-bg min-h-full">
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-box">
+            <div class="loading-spinner"></div>
+            <p>Sharpening the sheriff's badge...</p>
+        </div>
+    </div>
     <div class="min-h-full">
         <!-- Header -->
         <header class="leather-texture border-b-4 border-yellow-600 shadow-lg">
@@ -158,24 +195,48 @@
         </main>
     </div>
     <script>
+        const form = document.getElementById('chatForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const loadingOverlay = document.getElementById('loadingOverlay');
         const fileInput = document.getElementById('fileInput');
         const fileInfo = document.getElementById('fileInfo');
         const fileName = document.getElementById('fileName');
         const removeFile = document.getElementById('removeFile');
-        fileInput.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file) {
-                selectedFile = file;
-                fileName.textContent = `📄 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
-                fileInfo.classList.remove('hidden');
-            }
-        });
+        let selectedFile = null;
 
-        // Remove file
-        removeFile.addEventListener('click', function() {
-            selectedFile = null;
-            fileInput.value = '';
-            fileInfo.classList.add('hidden');
-        });
+        if (fileInput) {
+            fileInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    selectedFile = file;
+                    const sizeKb = (file.size / 1024).toFixed(1);
+                    fileName.textContent = `${file.name} (${sizeKb} KB)`;
+                    fileInfo.classList.remove('hidden');
+                }
+            });
+        }
+
+        if (removeFile) {
+            removeFile.addEventListener('click', () => {
+                selectedFile = null;
+                if (fileInput) {
+                    fileInput.value = '';
+                }
+                fileInfo.classList.add('hidden');
+            });
+        }
+
+        if (form) {
+            form.addEventListener('submit', () => {
+                if (loadingOverlay) {
+                    loadingOverlay.classList.add('active');
+                }
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'Tracking vulnerabilities...';
+                }
+            });
+        }
     </script>
+
     </html>

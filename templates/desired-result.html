@@ -17,7 +17,7 @@
     /* Western flip card style (from wanted poster) */
     .wanted-poster {
       width: 350px;
-      height: 500px;
+      height: 520px;
       perspective: 1000px;
       cursor: pointer;
     }
@@ -107,8 +107,11 @@
       font-size: 16px;
       line-height: 1.4;
       color: #2F1B14;
-      margin-bottom: 20px;
+      margin-bottom: 18px;
       text-align: left;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      padding-right: 4px;
     }
 
     .reward {
@@ -135,6 +138,8 @@
       padding: 15px;
       border-radius: 5px;
       border: 2px dashed #8B4513;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .flip-hint {
@@ -153,6 +158,59 @@
       font-size: 24px;
       color: #FFD700;
       text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+    }
+    .cvss-banner {
+      position: absolute;
+      top: -14px;
+      left: -28px;
+      background: #B22222;
+      color: #fff;
+      padding: 6px 18px;
+      font-size: 13px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      transform: rotate(-15deg);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .star-rating {
+      margin-top: -10px;
+      margin-bottom: 20px;
+      font-size: 18px;
+      color: #B8860B;
+      letter-spacing: 4px;
+    }
+    .summary-panel {
+      background: rgba(255, 255, 255, 0.85);
+      border: 3px solid #8B4513;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+      margin-bottom: 32px;
+    }
+    .summary-panel h3 {
+      font-size: 28px;
+      color: #8B0000;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    .summary-panel p {
+      color: #2F1B14;
+      line-height: 1.6;
+      font-size: 16px;
+      text-align: left;
+    }
+    .model-summary {
+      margin-top: 14px;
+      padding-left: 12px;
+      border-left: 4px solid #8B4513;
+      font-style: italic;
+    }
+    .status-note {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #8B0000;
     }
   </style>
 </head>
@@ -183,16 +241,16 @@
 
     <!-- Main Content -->
     <main class="max-w-6xl mx-auto px-4 py-8">
-      <!-- Welcome Message -->
-      <div class="rope-border bg-amber-50 p-6 mb-8 shadow-xl text-center">
-        <h2 class="cowboy-font text-3xl text-amber-900 mb-4">
-          🎯 Howdy, Partner! 🎯
-        </h2>
-        <p class="text-amber-800 text-lg">
-          Welcome to VulSheriff's AI-powered vulnerability hunting station! 
-          Drop your code or describe your security concerns, and I'll help you track down those pesky bugs faster than a tumbleweed in a tornado!
-        </p>
-      </div>
+      <section class="summary-panel">
+        <h3 class="cowboy-font text-amber-900">Sheriff's Security Brief</h3>
+        <p>{{ overall_summary }}</p>
+        {% if summary and summary != overall_summary %}
+        <p class="model-summary">{{ summary }}</p>
+        {% endif %}
+        {% if status_message and status_message not in (summary, overall_summary) %}
+        <p class="status-note">{{ status_message }}</p>
+        {% endif %}
+      </section>
 
       <!-- Findings Grid -->
       {% block content %}
@@ -202,6 +260,7 @@
           <div class="card">
             <!-- Front -->
             <div class="card-face front">
+              <div class="cvss-banner">CVSS {{ f.cvss_score }}</div>
               <div class="sheriff-star">⭐</div>
               <div class="wanted-header">WANTED</div>
               <div class="dead-or-alive">DEAD OR PATCHED</div>
@@ -209,11 +268,13 @@
               <div class="severity-badge {{ f.severity|lower }}">
                 {{ f.severity }}
               </div>
+              <div class="star-rating" aria-label="{{ f.star_label }}">
+                {{ f.star_display }}
+              </div>
               <div class="description">{{ f.description }}</div>
               <div class="reward">REWARD: SECURE CODE</div>
               <div class="flip-hint">Hover to see bounty details</div>
             </div>
-
             <!-- Back -->
             <div class="card-face back">
               <div class="suggestion-title">BOUNTY INSTRUCTIONS</div>

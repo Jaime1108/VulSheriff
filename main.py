@@ -63,6 +63,7 @@ OVERFLOW_SUMMARY_LINES = 4
 MAX_PER_FILE_ANALYSES = 30
 RATE_LIMIT_MIN_DELAY = 3.2  # seconds between free model calls
 PER_FILE_MAX_RETRIES = 3
+AGGREGATE_CONTENT_PREVIEW_CHARS = 2000
 
 EXECUTOR_MAX_WORKERS = int(os.getenv("VULNSHERIF_MAX_WORKERS", "2"))
 
@@ -528,53 +529,211 @@ def build_report(raw_payload: Any, fallback_summary: str = "") -> Optional[Dict[
     return {"summary": summary, "findings": findings}
 
 
+FALLBACK_NO_SOURCE_MESSAGE = (
+    "No source code was provided for analysis. The audit could not be performed, and therefore "
+    "no security findings can be reported. Please provide the contents of the relevant files "
+    "for a complete security review."
+)
+
+
+def truncate_words(text: str, max_words: int = 40) -> str:
+    if not text:
+        return ""
+    words = text.split()
+    if len(words) <= max_words:
+        return text
+    return " ".join(words[:max_words]) + "..."
+
+
+def parse_cvss_score(value: Any) -> Tuple[str, Optional[float]]:
+    raw_text = coerce_text(value)
+    if not raw_text:
+        return "N/A", None
+    match = re.search(r"\d+(?:\.\d+)?", raw_text)
+    if not match:
+        return raw_text, None
+    try:
+        score = float(match.group())
+    except ValueError:
+        return raw_text, None
+    score = max(0.0, min(score, 10.0))
+    return f"{score:.1f}", score
+
+
+def determine_star_rating(severity: str, cvss_value: Optional[float]) -> int:
+    if cvss_value is not None:
+        if cvss_value >= 9.0:
+            return 5
+        if cvss_value >= 7.0:
+            return 4
+        if cvss_value >= 4.0:
+            return 3
+        if cvss_value >= 1.0:
+            return 2
+        return 1
+    severity_scale = {
+        "Critical": 5,
+        "High": 4,
+        "Medium": 3,
+        "Low": 2,
+    }
+    return severity_scale.get(severity, 1)
+
+
+def build_star_display(stars: int, total: int = 5) -> str:
+    stars = max(0, min(stars, total))
+    return "★" * stars + "☆" * (total - stars)
+
+
+def prepare_finding_card(raw: Dict[str, Any]) -> Dict[str, Any]:
+    severity = normalize_severity(raw.get("severity"))
+    title = coerce_text(raw.get("title") or "Untitled Finding")
+    description = truncate_words(coerce_text(raw.get("description")), 32).strip()
+    if not description:
+        description = "No description provided."
+    suggestion_source = raw.get("suggestion") or raw.get("remediation")
+    suggestion = truncate_words(coerce_text(suggestion_source), 32).strip()
+    if not suggestion:
+        suggestion = "No remediation guidance provided."
+    cvss_text, cvss_value = parse_cvss_score(raw.get("cvss_score") or raw.get("cvss"))
+    star_rating = determine_star_rating(severity, cvss_value)
+    return {
+        "title": title,
+        "severity": severity,
+        "description": description,
+        "suggestion": suggestion,
+        "cvss_score": cvss_text,
+        "star_rating": star_rating,
+        "star_display": build_star_display(star_rating),
+        "star_label": f"{star_rating} out of 5",
+    }
+
+
+def build_overall_summary(scan_meta: Optional[Dict[str, Any]],
+                          severity_counts: Optional[Dict[str, int]],
+                          summary_text: str,
+                          status_message: str) -> str:
+    scan_meta = scan_meta or {}
+    files_included = scan_meta.get("files_included") or 0
+    notes_provided = bool(scan_meta.get("notes_provided"))
+    prompt_only = bool(scan_meta.get("prompt_only"))
+
+    total_findings = 0
+    highest_severity: Optional[str] = None
+    if severity_counts:
+        for label in SEVERITY_LABELS:
+            count = severity_counts.get(label, 0)
+            total_findings += count
+            if highest_severity is None and count > 0:
+                highest_severity = label
+
+    context_parts: List[str] = []
+    if files_included:
+        context_parts.append(
+            f"Scanned {files_included} file{'s' if files_included != 1 else ''}."
+        )
+    elif notes_provided or prompt_only:
+        context_parts.append(
+            "No files were uploaded; the assessment is based on the provided notes."
+        )
+    else:
+        context_parts.append(FALLBACK_NO_SOURCE_MESSAGE)
+
+    if total_findings == 0:
+        risk_summary = "No structured vulnerabilities were reported in the current scan."
+    else:
+        severity_phrases = {
+            "Critical": "Severe risk: critical issues need immediate attention.",
+            "High": "High risk: significant weaknesses were detected.",
+            "Medium": "Moderate risk: issues should be addressed promptly.",
+            "Low": "Low risk: minor findings were recorded.",
+        }
+        severity_text = severity_phrases.get(highest_severity, "Risk level undetermined.")
+        highest_count = severity_counts.get(highest_severity, 0) if severity_counts else 0
+        risk_summary = (
+            f"{severity_text} Detected {total_findings} total finding"
+            f"{'s' if total_findings != 1 else ''}, including "
+            f"{highest_count} {highest_severity.lower() if highest_severity else 'unknown'} severity item"
+            f"{'s' if highest_count != 1 else ''}."
+        )
+
+    summary_components = context_parts + [risk_summary]
+
+    summary_body = summary_text.strip() if summary_text else ""
+    if summary_body:
+        summary_components.append(summary_body)
+    if status_message and status_message not in summary_components:
+        summary_components.append(status_message)
+
+    combined = " ".join(part.strip() for part in summary_components if part)
+    if not combined:
+        return FALLBACK_NO_SOURCE_MESSAGE
+    return combined
+
+
 def build_frontend_payload(job_result: Dict[str, Any]) -> Dict[str, Any]:
     report = job_result.get("report") or {}
     raw_findings = report.get("findings") or []
-    prepared_findings: List[Dict[str, str]] = []
+    prepared_findings: List[Dict[str, Any]] = []
     for raw in raw_findings:
-        severity = normalize_severity(raw.get("severity"))
-        prepared_findings.append({
-            "title": coerce_text(raw.get("title") or "Untitled Finding"),
-            "severity": severity,
-            "description": coerce_text(raw.get("description") or "No description provided."),
-            "suggestion": coerce_text(
-                raw.get("remediation")
-                or raw.get("suggestion")
-                or "No remediation guidance provided."
-            ),
-        })
+        prepared_findings.append(prepare_finding_card(raw))
     if not prepared_findings:
         summary_text = coerce_text(report.get("summary")) or coerce_text(job_result.get("status_message"))
-        prepared_findings.append({
+        prepared_findings.append(prepare_finding_card({
             "title": "No Vulnerabilities Reported",
             "severity": "Low",
             "description": summary_text or "The analysis completed without returning structured findings.",
-            "suggestion": "If you expected findings, consider rerunning the scan with additional context or files.",
-        })
+            "remediation": "If you expected findings, consider rerunning the scan with additional context or files.",
+            "cvss_score": "N/A",
+        }))
+    scan_meta = job_result.get("scan_meta") or {}
+    severity_counts = job_result.get("severity_counts") or {}
+    summary_raw = coerce_text(report.get("summary"))
+    summary_text = truncate_words(summary_raw, 80)
+    status_raw = coerce_text(job_result.get("status_message"))
+    status_message = truncate_words(status_raw, 40)
+    overall_summary = build_overall_summary(scan_meta, severity_counts, summary_text, status_message)
+
+    def _normalize(text: str) -> str:
+        return " ".join(text.lower().split())
+
+    normalized_overall = _normalize(overall_summary)
+    if summary_text and _normalize(summary_text) in normalized_overall:
+        summary_text = ""
+    if status_message:
+        norm_status = _normalize(status_message)
+        if norm_status in normalized_overall or (summary_text and norm_status in _normalize(summary_text)):
+            status_message = ""
+        elif summary_text and status_message == summary_text:
+            status_message = ""
     return {
         "findings": prepared_findings,
-        "summary": coerce_text(report.get("summary")),
-        "scan_meta": job_result.get("scan_meta"),
-        "severity_counts": job_result.get("severity_counts"),
-        "status_message": job_result.get("status_message"),
+        "summary": summary_text,
+        "overall_summary": overall_summary,
+        "scan_meta": scan_meta,
+        "severity_counts": severity_counts,
+        "status_message": status_message,
         "raw_report": report,
     }
 
 
 def build_frontend_error_payload(message: str, severity: str = "High") -> Dict[str, Any]:
     safe_message = coerce_text(message) or "Analysis failed unexpectedly."
+    summary_trimmed = truncate_words(safe_message, 80)
+    finding = prepare_finding_card({
+        "title": "Analysis Failed",
+        "severity": severity,
+        "description": safe_message,
+        "remediation": "Please try again later or adjust your input files and resubmit.",
+        "cvss_score": "N/A",
+    })
     return {
-        "findings": [{
-            "title": "Analysis Failed",
-            "severity": normalize_severity(severity),
-            "description": safe_message,
-            "suggestion": "Please try again later or adjust your input files and resubmit.",
-        }],
-        "summary": "",
+        "findings": [finding],
+        "summary": summary_trimmed,
+        "overall_summary": summary_trimmed,
         "scan_meta": None,
         "severity_counts": None,
-        "status_message": safe_message,
+        "status_message": summary_trimmed,
         "raw_report": None,
     }
 
@@ -647,6 +806,9 @@ def call_model_for_file(api_key: str,
                     progress_cb(f"file:{file_item.get('path')}", "No structured JSON", state="warning")
                 return None
             parsed.setdefault("file_path", file_item.get("path"))
+            preview = file_text[:AGGREGATE_CONTENT_PREVIEW_CHARS]
+            if preview:
+                parsed.setdefault("content_preview", preview)
             if progress_cb:
                 progress_cb(f"file:{file_item.get('path')}", "Completed", state="success")
             return parsed
@@ -862,12 +1024,14 @@ def perform_analysis_job(req_id: str,
                 "file_path": path,
                 "summary": "Not analyzed directly (token budget); covered via aggregated context.",
                 "findings": [],
+                "content_preview": (file_item.get("text") or "")[:AGGREGATE_CONTENT_PREVIEW_CHARS],
             })
         if not per_file_results and prompt_only:
             per_file_results.append({
                 "file_path": "prompt_only",
                 "summary": "No files analyzed; report based on user context.",
                 "findings": [],
+                "content_preview": notes[:AGGREGATE_CONTENT_PREVIEW_CHARS],
             })
 
         update_job_progress(req_id, "aggregate", "Synthesizing report")
