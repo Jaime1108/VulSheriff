@@ -1248,9 +1248,20 @@ def build_per_file_system_prompt() -> str:
         "      \"remediation\": \"Targeted fix guidance\"\n"
         "    }\n"
         "  ]\n"
-        "}\n"
-        "Return an empty findings array if no issues are present. "
-        "Only cite CVEs that accurately match the vulnerability evidenced in this file.\n"
+        "   \"instruction\": [\n"
+        "    {\n"
+        "      \"title\": \"Short title for security best practice\",\n"
+        "      \"steps\": [\n"
+        "        \"1. First security practice or setup step.\",\n"
+        "        \"2. Next step or recommendation.\",\n"
+        "        \"3. Optional follow-up step.\"\n"
+        "      ],\n"
+        "      \"note\": \"Optional final note or tip.\"\n"
+        "    }\n"
+        "  ]\n"
+        "}\n\n"
+        "Return an empty 'findings' array if no issues are present. "
+        "Only cite CVEs that accurately match vulnerabilities evidenced in this file."
     )
 
 

@@ -21,7 +21,13 @@
       perspective: 1000px;
       cursor: pointer;
     }
-
+    .banner {
+      display:flex;
+      justify-content:center;
+      background-color:background-color: rgba(139, 69, 19, 0.5);
+      border-radius: 5px  10px;
+      margin:0px;
+    }
     .card {
       width: 100%;
       height: 100%;
@@ -162,7 +168,7 @@
     <!-- Header -->
     <header class="leather-texture border-b-4 border-yellow-600 shadow-lg">
       <div class="max-w-6xl mx-auto px-4 py-6">
-        <div class="flex items-center justify-center space-x-4">
+        <div class="banner">
           <div class="sheriff-badge w-16 h-16 flex items-center justify-center">
             <span class="text-2xl">⭐</span>
           </div>
@@ -196,6 +202,7 @@
 
       <!-- Findings Grid -->
       {% block content %}
+      {% if findings and findings|length > 0 %}
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 justify-items-center">
         {% for f in findings %}
         <div class="wanted-poster">
@@ -226,6 +233,42 @@
         </div>
         {% endfor %}
       </div>
+      {% else %}
+      <!-- 📝 No Findings – Show Dynamic Instruction Paper -->
+      <div class="paper-tear"></div>
+      <div class="paper-content max-w-3xl mx-auto bg-amber-50 border-4 border-yellow-700 rounded-lg shadow-xl p-6 relative mt-10">
+
+        <!-- Dynamic Title -->
+        <h1 class="paper-title text-3xl font-bold text-center mb-6 text-amber-900">
+          {{ instruction.title or "Sheriff’s Guidelines" }}
+        </h1>
+
+        <!-- Dynamic Steps -->
+        {% if instruction.steps %}
+          {% for step in instruction.steps %}
+          <div class="instruction-item mb-2">
+            <span class="bullet">{{ loop.index }}.</span>
+            <span class="instruction-text">{{ step }}</span>
+          </div>
+          {% endfor %}
+        {% else %}
+          <p class="text-amber-800 italic">No instructions available, partner.</p>
+        {% endif %}
+
+        <!-- Optional Note -->
+        {% if instruction.note %}
+          <div class="note-scribble mt-6 p-4 bg-yellow-100 border-dashed border-2 border-amber-700 rounded-lg">
+            <div class="note-text text-amber-800 italic">
+              {{ instruction.note }}
+            </div>
+          </div>
+        {% endif %}
+
+        <!-- Doodles -->
+        <div class="doodle doodle-1 absolute top-2 left-4 text-3xl opacity-70">☁️</div>
+        <div class="doodle doodle-2 absolute bottom-4 right-4 text-3xl opacity-70">🛡️</div>
+      </div>
+    {% endif %}
       {% endblock %}
 
       <!-- Footer -->
