@@ -63,5 +63,11 @@ body {
     border-radius: 5px 10px;
 }
 .card:hover{
-    
+
+}
+h1 a{
+    transition: color 0.3s ease, filter 0.3s ease;
+}
+h1 a:hover{
+    filter:drop-shadow(1px 1px 20px gold)
 }

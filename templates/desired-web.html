@@ -22,7 +22,7 @@
             border-radius: 5px  10px;
             margin:0px;
           }
-        }
+        
         .loading-overlay {
             position: fixed;
             inset: 0;
@@ -62,6 +62,12 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        h1 a{
+            transition: color 0.3s ease, filter 0.3s ease;
+        }
+        h1 a:hover{
+            filter:drop-shadow(1px 1px 20px gold)
+        }
     </style>
 </head>
 <body class="western-bg min-h-full">
@@ -81,7 +87,7 @@
                     </div>
                     <div class="text-center">
                         <h1 class="cowboy-font text-4xl md:text-6xl text-yellow-300 drop-shadow-lg">
-                            Site Sheriff
+                            <a href="{{ url_for('index') }}">Site Sheriff</a>
                         </h1>
                         <p class="text-yellow-200 text-lg md:text-xl font-bold">
                             🤠 Vulnerability Bounty Hunter 🤠
@@ -117,7 +123,7 @@
                         <div class="w-10 h-10 bg-amber-500 rounded-full flex items-center justify-center">
                             <span class="text-xl">🤖</span>
                         </div>
-                        <div>
+                        <div class="banner">
                             <h3 class="cowboy-font text-xl text-yellow-200">Sheriff AI Assistant</h3>
                             <p class="text-yellow-300 text-sm">Ready to hunt vulnerabilities</p>
                         </div>
@@ -236,16 +242,18 @@
         }
 
         if (form) {
-            form.addEventListener('submit', () => {
-                if (loadingOverlay) {
-                    loadingOverlay.classList.add('active');
-                }
+            form.addEventListener('submit', (e) => {
+                // Only activate overlay if a submit was intentional
+                if (!e.submitter || e.submitter.id !== 'submitBtn') return;
+        
+                if (loadingOverlay) loadingOverlay.classList.add('active');
                 if (submitBtn) {
                     submitBtn.disabled = true;
                     submitBtn.textContent = 'Tracking vulnerabilities...';
                 }
             });
         }
+        
     </script>
 
     </html>

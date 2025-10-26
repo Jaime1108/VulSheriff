@@ -925,6 +925,7 @@ def call_model_for_aggregate(api_key: str,
 def perform_analysis_job(req_id: str,
                          api_key: str,
                          zip_path: Optional[str],
+                         single_file: Optional[Dict[str, Any]],
                          notes: str,
                          prompt_only: bool,
                          dry_run: bool,
@@ -942,6 +943,7 @@ def perform_analysis_job(req_id: str,
         if not api_key:
             raise RuntimeError("Missing Gemini API key.")
         ensure_gemini_client(api_key)
+        upload_available = False
         if zip_path:
             try:
                 with zipfile.ZipFile(zip_path) as zf:
@@ -949,11 +951,32 @@ def perform_analysis_job(req_id: str,
                     safe_extract_zip(zf, tmp_root)
             except zipfile.BadZipFile as exc:
                 raise RuntimeError("Invalid ZIP archive.") from exc
-        if zip_path or prompt_only:
+            upload_available = True
+        elif single_file:
+            filename = (single_file.get("filename") or "").strip()
+            filename = os.path.basename(filename)
+            if not filename:
+                filename = "uploaded_file"
+            if not os.path.splitext(filename)[1]:
+                filename = f"{filename}.txt"
+            data = single_file.get("data")
+            if data is None:
+                raise RuntimeError("Uploaded file is empty.")
+            if isinstance(data, str):
+                data = data.encode("utf-8", errors="ignore")
+            if not data:
+                raise RuntimeError("Uploaded file is empty.")
+            dest_path = os.path.join(tmp_root, filename)
+            os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+            with open(dest_path, "wb") as dest:
+                dest.write(data)
+            upload_available = True
+        if upload_available or prompt_only:
             files, count, total = collect_files(tmp_root)
-            update_job_progress(req_id, "files", f"Collected {len(files)} files ({format_bytes(total)})")
+            if upload_available:
+                update_job_progress(req_id, "files", f"Collected {len(files)} files ({format_bytes(total)})")
         else:
-            raise RuntimeError("Upload a ZIP or enable prompt-only mode with context.")
+            raise RuntimeError("Upload a ZIP, a supported text file, or enable prompt-only mode with context.")
 
         packaged = format_files_for_prompt(files)
         packaged_len = len(packaged.encode("utf-8", errors="ignore"))
@@ -1653,32 +1676,40 @@ def analyze():
         logger.error(f"Gemini client initialization failed: {exc}")
         return redirect(url_for("index"))
     if (not file or file.filename == "") and not prompt_only and not notes.strip():
-        flash("Upload a ZIP or enter notes (prompt-only).", "error")
-        return redirect(url_for("index"))
-    if file and file.filename != "" and not file.filename.lower().endswith(".zip"):
-        flash("Only .zip files are supported.", "error")
+        flash("Upload a file or enter notes (prompt-only).", "error")
         return redirect(url_for("index"))
 
     req_id = str(uuid.uuid4())
     logger.info(f"[{req_id}] queued analysis model={model} prompt_only={prompt_only} dry_run={dry_run}")
 
     zip_temp_path = None
+    single_file_payload: Optional[Dict[str, Any]] = None
     file = request.files.get("zip_file")
     try:
         if file and file.filename != "":
-            tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
             file.stream.seek(0)
-            tmp_file.write(file.read())
-            tmp_file.close()
-            zip_temp_path = tmp_file.name
+            filename = file.filename
+            if filename.lower().endswith(".zip"):
+                tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+                tmp_file.write(file.read())
+                tmp_file.close()
+                zip_temp_path = tmp_file.name
+            else:
+                data = file.read()
+                if not data:
+                    raise ValueError("Uploaded file is empty.")
+                single_file_payload = {
+                    "filename": filename,
+                    "data": data,
+                }
     except Exception as exc:
         if zip_temp_path:
             try:
                 os.unlink(zip_temp_path)
             except Exception:
                 pass
-        logger.exception(f"Failed to persist uploaded ZIP: {exc}")
-        flash("Failed to read uploaded ZIP.", "error")
+        logger.exception(f"Failed to persist uploaded file: {exc}")
+        flash("Failed to read uploaded file.", "error")
         return redirect(url_for("index"))
 
     init_job(req_id)
@@ -1687,6 +1718,7 @@ def analyze():
         req_id=req_id,
         api_key=api_key,
         zip_path=zip_temp_path,
+        single_file=single_file_payload,
         notes=notes,
         prompt_only=prompt_only,
         dry_run=dry_run,
