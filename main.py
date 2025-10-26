@@ -545,6 +545,20 @@ def truncate_words(text: str, max_words: int = 40) -> str:
     return " ".join(words[:max_words]) + "..."
 
 
+def clamp_characters(text: str, max_chars: int) -> str:
+    if not text:
+        return ""
+    normalized = " ".join(text.split()).strip()
+    if len(normalized) <= max_chars:
+        return normalized
+    truncated = normalized[:max_chars].rstrip()
+    if len(normalized) > max_chars:
+        last_space = truncated.rfind(" ")
+        if last_space > 0:
+            truncated = truncated[:last_space].rstrip()
+    return truncated or normalized[:max_chars].rstrip()
+
+
 def parse_cvss_score(value: Any) -> Tuple[str, Optional[float]]:
     raw_text = coerce_text(value)
     if not raw_text:
@@ -588,11 +602,11 @@ def build_star_display(stars: int, total: int = 5) -> str:
 def prepare_finding_card(raw: Dict[str, Any]) -> Dict[str, Any]:
     severity = normalize_severity(raw.get("severity"))
     title = coerce_text(raw.get("title") or "Untitled Finding")
-    description = truncate_words(coerce_text(raw.get("description")), 32).strip()
+    description = clamp_characters(coerce_text(raw.get("description")), 200)
     if not description:
         description = "No description provided."
     suggestion_source = raw.get("suggestion") or raw.get("remediation")
-    suggestion = truncate_words(coerce_text(suggestion_source), 32).strip()
+    suggestion = clamp_characters(coerce_text(suggestion_source), 200)
     if not suggestion:
         suggestion = "No remediation guidance provided."
     cvss_text, cvss_value = parse_cvss_score(raw.get("cvss_score") or raw.get("cvss"))
@@ -1422,7 +1436,7 @@ def build_per_file_system_prompt() -> str:
         "Respond with a JSON object:\n"
         "{\n"
         "  \"file_path\": \"...\",\n"
-        "  \"summary\": \"Short summary for this file\",\n"
+        "  \"summary\": \"Short summary for this file (<=200 characters, including spaces)\",\n"
         "  \"findings\": [\n"
         "    {\n"
         "      \"title\": \"...\",\n"
@@ -1430,9 +1444,9 @@ def build_per_file_system_prompt() -> str:
         "      \"category\": \"Short category (e.g., SQL Injection)\",\n"
         "      \"cve_id\": \"CVE-YYYY-NNNN if confidently mapped, otherwise 'N/A'\",\n"
         "      \"cvss_score\": \"Score and vector if known\",\n"
-        "      \"description\": \"Impact and likelihood grounded in this file\",\n"
+        "      \"description\": \"Impact and likelihood grounded in this file; keep <=200 characters with complete sentences and no ellipses.\",\n"
         "      \"evidence\": \"Code snippet or line reference\",\n"
-        "      \"remediation\": \"Targeted fix guidance\"\n"
+        "      \"remediation\": \"Targeted fix guidance in <=200 characters, including spaces, without ellipses.\"\n"
         "    }\n"
         "  ]\n"
         "   \"instruction\": [\n"
