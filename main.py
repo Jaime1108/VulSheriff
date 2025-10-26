@@ -528,6 +528,57 @@ def build_report(raw_payload: Any, fallback_summary: str = "") -> Optional[Dict[
     return {"summary": summary, "findings": findings}
 
 
+def build_frontend_payload(job_result: Dict[str, Any]) -> Dict[str, Any]:
+    report = job_result.get("report") or {}
+    raw_findings = report.get("findings") or []
+    prepared_findings: List[Dict[str, str]] = []
+    for raw in raw_findings:
+        severity = normalize_severity(raw.get("severity"))
+        prepared_findings.append({
+            "title": coerce_text(raw.get("title") or "Untitled Finding"),
+            "severity": severity,
+            "description": coerce_text(raw.get("description") or "No description provided."),
+            "suggestion": coerce_text(
+                raw.get("remediation")
+                or raw.get("suggestion")
+                or "No remediation guidance provided."
+            ),
+        })
+    if not prepared_findings:
+        summary_text = coerce_text(report.get("summary")) or coerce_text(job_result.get("status_message"))
+        prepared_findings.append({
+            "title": "No Vulnerabilities Reported",
+            "severity": "Low",
+            "description": summary_text or "The analysis completed without returning structured findings.",
+            "suggestion": "If you expected findings, consider rerunning the scan with additional context or files.",
+        })
+    return {
+        "findings": prepared_findings,
+        "summary": coerce_text(report.get("summary")),
+        "scan_meta": job_result.get("scan_meta"),
+        "severity_counts": job_result.get("severity_counts"),
+        "status_message": job_result.get("status_message"),
+        "raw_report": report,
+    }
+
+
+def build_frontend_error_payload(message: str, severity: str = "High") -> Dict[str, Any]:
+    safe_message = coerce_text(message) or "Analysis failed unexpectedly."
+    return {
+        "findings": [{
+            "title": "Analysis Failed",
+            "severity": normalize_severity(severity),
+            "description": safe_message,
+            "suggestion": "Please try again later or adjust your input files and resubmit.",
+        }],
+        "summary": "",
+        "scan_meta": None,
+        "severity_counts": None,
+        "status_message": safe_message,
+        "raw_report": None,
+    }
+
+
 def build_scan_meta(req_id: str,
                     files: List[Dict[str, Any]],
                     elapsed_seconds: float,
@@ -1397,7 +1448,7 @@ def try_extract_json_block(text: str):
 @app.get("/")
 def index():
     return render_template(
-        "index.html",
+        "desired-web.html",
         max_files=MAX_FILES,
         max_total=format_bytes(MAX_TOTAL_BYTES),
         max_file=format_bytes(MAX_FILE_BYTES),
@@ -1457,25 +1508,31 @@ def analyze():
 
     init_job(req_id)
     update_job_progress(req_id, "queued", "Job queued")
-    executor.submit(
-        perform_analysis_job,
-        req_id,
-        api_key,
-        zip_temp_path,
-        notes,
-        prompt_only,
-        dry_run,
-        debug_mode,
-        temperature,
+    perform_analysis_job(
+        req_id=req_id,
+        api_key=api_key,
+        zip_path=zip_temp_path,
+        notes=notes,
+        prompt_only=prompt_only,
+        dry_run=dry_run,
+        debug_mode=debug_mode,
+        temperature=temperature,
     )
-    return render_template("progress.html", req_id=req_id)
+    data = get_job(req_id)
+    if not data:
+        context = build_frontend_error_payload("Analysis completed, but the result could not be retrieved.")
+        with progress_lock:
+            job_store.pop(req_id, None)
+        return render_template("desired-result.html", **context), 500
+    return redirect(url_for("job_result", req_id=req_id), code=303)
 
 
 @app.get("/progress/<req_id>")
 def progress(req_id: str):
-    if not get_job(req_id):
+    data = get_job(req_id)
+    if not data:
         abort(404)
-    return render_template("progress.html", req_id=req_id)
+    return jsonify({k: v for k, v in data.items() if k != "result"})
 
 
 @app.get("/status/<req_id>")
@@ -1496,12 +1553,16 @@ def job_result(req_id: str):
         result_context = data.get("result") or {}
         with progress_lock:
             job_store.pop(req_id, None)
-        return render_template("result.html", **result_context)
+        payload = build_frontend_payload(result_context)
+        payload["req_id"] = req_id
+        return render_template("desired-result.html", **payload)
     if status == "failed":
         error_message = data.get("error", "Job failed.")
         with progress_lock:
             job_store.pop(req_id, None)
-        return render_template("progress.html", req_id=req_id, error=data.get("error"))
+        payload = build_frontend_error_payload(error_message)
+        payload["req_id"] = req_id
+        return render_template("desired-result.html", **payload), 500
     return redirect(url_for("progress", req_id=req_id))
 
 @app.get("/health")
