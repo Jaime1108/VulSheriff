@@ -10,6 +10,7 @@ import logging
 import hashlib
 import random
 import re
+import signal
 from collections import defaultdict
 from datetime import datetime
 from typing import List, Tuple, Dict, Any, Optional
@@ -142,6 +143,35 @@ if app.config.get("OPENROUTER_API_KEY"):
     logger.info("Detected OPENROUTER_API_KEY from environment/.env")
 else:
     logger.warning("OPENROUTER_API_KEY not set; will prompt on first run and store securely in user config.")
+
+
+def _shutdown_handler(signum, frame):
+    logger.warning(f"Received shutdown signal ({signum}); cancelling pending work and exiting.")
+    try:
+        executor.shutdown(wait=False, cancel_futures=True)
+    except Exception:
+        pass
+    for thread in list(getattr(executor, "_threads", [])):
+        try:
+            thread.daemon = True
+        except Exception:
+            pass
+    os._exit(0)
+
+
+def _register_shutdown_signals():
+    for sig in (getattr(signal, "SIGINT", None), getattr(signal, "SIGTERM", None)):
+        if sig is None:
+            continue
+        try:
+            signal.signal(sig, _shutdown_handler)
+        except (AttributeError, ValueError):
+            # AttributeError: signal missing on platform (e.g., SIGTERM on Windows)
+            # ValueError: signal registration attempted from non-main thread (shouldn't happen here)
+            continue
+
+
+_register_shutdown_signals()
 
 
 # ----------------------------
