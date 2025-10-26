@@ -21,8 +21,14 @@ from dotenv import load_dotenv
 from pathlib import Path
 from getpass import getpass
 
-import requests
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, abort
+
+try:
+    import google.generativeai as genai
+    from google.api_core import exceptions as google_exceptions
+except ImportError:  # pragma: no cover - handled at runtime with helpful message
+    genai = None
+    google_exceptions = None
 
 
 # ----------------------------
@@ -37,15 +43,15 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change")
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64MB upload cap
-app.config["OPENROUTER_API_KEY"] = os.environ.get("OPENROUTER_API_KEY", "")
+app.config["GEMINI_API_KEY"] = os.environ.get("GEMINI_API_KEY", "")
 
 
 # ----------------------------
 # CONSTANTS
 # ----------------------------
-OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 # Force a specific model (handled purely backend)
-FORCED_MODEL = "qwen/qwen3-coder:free"
+FORCED_MODEL = "gemini-2.5-pro"
+API_KEY_ENV_VAR = "GEMINI_API_KEY"
 DEFAULT_TEMPERATURE = 0.2
 MAX_TOTAL_BYTES = 2_000_000
 MAX_FILE_BYTES = 100_000
@@ -139,10 +145,10 @@ def setup_logger():
 
 
 logger = setup_logger()
-if app.config.get("OPENROUTER_API_KEY"):
-    logger.info("Detected OPENROUTER_API_KEY from environment/.env")
+if app.config.get(API_KEY_ENV_VAR):
+    logger.info("Detected GEMINI_API_KEY from environment/.env")
 else:
-    logger.warning("OPENROUTER_API_KEY not set; will prompt on first run and store securely in user config.")
+    logger.warning("GEMINI_API_KEY not set; will prompt on first run and store securely in user config.")
 
 
 def _shutdown_handler(signum, frame):
@@ -173,6 +179,24 @@ def _register_shutdown_signals():
 
 _register_shutdown_signals()
 
+_configured_gemini_key: Optional[str] = None
+
+
+def ensure_gemini_client(api_key: str) -> None:
+    """Configure the Gemini SDK once per API key."""
+    global _configured_gemini_key
+    if genai is None:
+        raise RuntimeError(
+            "google-generativeai is not installed. "
+            "Install dependencies (`pip install -r requirements.txt`) and try again."
+        )
+    if not api_key:
+        raise RuntimeError("Missing Gemini API key.")
+    if _configured_gemini_key == api_key:
+        return
+    genai.configure(api_key=api_key)
+    _configured_gemini_key = api_key
+
 
 # ----------------------------
 # FIRST-RUN API KEY SETUP
@@ -195,7 +219,7 @@ def load_saved_api_key() -> str:
         cfg_file = config_path()
         if cfg_file.is_file():
             data = json.loads(cfg_file.read_text(encoding="utf-8"))
-            key = data.get("OPENROUTER_API_KEY", "")
+            key = data.get(API_KEY_ENV_VAR, "")
             if key:
                 return key
     except Exception:
@@ -207,7 +231,7 @@ def save_api_key_secure(key: str) -> None:
     try:
         cfg_dir = get_config_dir()
         cfg_dir.mkdir(parents=True, exist_ok=True)
-        cfg = {"OPENROUTER_API_KEY": key}
+        cfg = {API_KEY_ENV_VAR: key}
         p = cfg_dir / "config.json"
         p.write_text(json.dumps(cfg), encoding="utf-8")
     except Exception as e:
@@ -217,28 +241,32 @@ def save_api_key_secure(key: str) -> None:
 def ensure_api_key_interactive():
     """Ensure we have an API key: env -> saved config -> interactive prompt."""
     # 1) Env/app config
-    key = app.config.get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY", "")
+    key = app.config.get(API_KEY_ENV_VAR) or os.getenv(API_KEY_ENV_VAR, "")
     if key:
+        app.config[API_KEY_ENV_VAR] = key
+        ensure_gemini_client(key)
         return key
     # 2) Saved config
     key = load_saved_api_key()
     if key:
-        app.config["OPENROUTER_API_KEY"] = key
-        os.environ["OPENROUTER_API_KEY"] = key
-        logger.info("Loaded OPENROUTER_API_KEY from user config")
+        app.config[API_KEY_ENV_VAR] = key
+        os.environ[API_KEY_ENV_VAR] = key
+        logger.info("Loaded GEMINI_API_KEY from user config")
+        ensure_gemini_client(key)
         return key
     # 3) Prompt user once
     try:
-        print("OpenRouter API key not found.")
-        key = getpass("Enter your OpenRouter API key (input hidden): ").strip()
+        print("Gemini API key not found.")
+        key = getpass("Enter your Gemini API key (input hidden): ").strip()
     except Exception:
-        key = input("Enter your OpenRouter API key: ").strip()
+        key = input("Enter your Gemini API key: ").strip()
     if not key:
         raise RuntimeError("No API key provided")
-    app.config["OPENROUTER_API_KEY"] = key
-    os.environ["OPENROUTER_API_KEY"] = key
+    app.config[API_KEY_ENV_VAR] = key
+    os.environ[API_KEY_ENV_VAR] = key
     save_api_key_secure(key)
     logger.info("Saved API key to user config directory")
+    ensure_gemini_client(key)
     return key
 
 
@@ -544,17 +572,20 @@ def call_model_for_file(api_key: str,
         f"{file_text}\n"
         "```\n"
     )
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_content},
-    ]
     for attempt in range(1, PER_FILE_MAX_RETRIES + 1):
         if progress_cb:
             progress_cb(f"file:{file_item.get('path')}", f"Attempt {attempt}")
         wait_for_rate_limit()
         try:
-            resp = call_openrouter(api_key, model, messages, temperature=temperature, timeout=timeout)
-            content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+            content = call_gemini_generate(
+                api_key=api_key,
+                model=model,
+                system_prompt=system_prompt,
+                user_content=user_content,
+                temperature=temperature,
+                timeout=timeout,
+                max_output_tokens=2048,
+            )
             parsed = try_extract_json_block(content or "")
             if not parsed:
                 snippet = (content or "").strip()
@@ -568,32 +599,37 @@ def call_model_for_file(api_key: str,
             if progress_cb:
                 progress_cb(f"file:{file_item.get('path')}", "Completed", state="success")
             return parsed
-        except RuntimeError as exc:
-            message = str(exc)
-            if "429" in message:
-                wait_seconds = 6.0
-                reset_match = re.search(r"X-RateLimit-Reset['\":\s]+(\d+)", message)
-                if reset_match:
+        except Exception as exc:
+            if google_exceptions and isinstance(exc, google_exceptions.ResourceExhausted):
+                wait_seconds = 8.0
+                retry_delay = getattr(exc, "retry_delay", None)
+                if retry_delay:
                     try:
-                        reset_ms = int(reset_match.group(1))
-                        now_ms = int(time.time() * 1000)
-                        wait_seconds = max(5.0, (reset_ms - now_ms) / 1000.0)
+                        wait_seconds = max(wait_seconds, float(retry_delay.total_seconds()))  # type: ignore[arg-type]
                     except Exception:
-                        wait_seconds = 6.0
+                        try:
+                            wait_seconds = max(wait_seconds, float(retry_delay))
+                        except Exception:
+                            pass
                 if progress_cb:
                     progress_cb(
                         f"file:{file_item.get('path')}",
                         f"Rate limited; retrying in {wait_seconds:.0f}s",
                         state="waiting",
                     )
-                logger.warning(f"[{req_id}] 429 on {file_item.get('path')} attempt {attempt}: {message}")
+                logger.warning(f"[{req_id}] rate limit on {file_item.get('path')} attempt {attempt}: {exc}")
                 time.sleep(wait_seconds)
                 continue
-            logger.warning(f"[{req_id}] per-file analysis failed for {file_item.get('path')}: {exc}")
-            if progress_cb:
-                progress_cb(f"file:{file_item.get('path')}", "Failed", state="error")
-            return None
-        except Exception as exc:
+            if isinstance(exc, RuntimeError):
+                logger.warning(f"[{req_id}] per-file analysis failed for {file_item.get('path')}: {exc}")
+                if progress_cb:
+                    progress_cb(f"file:{file_item.get('path')}", "Failed", state="error")
+                return None
+            if google_exceptions and isinstance(exc, google_exceptions.GoogleAPIError):
+                logger.warning(f"[{req_id}] Gemini API error for {file_item.get('path')}: {exc}")
+                if progress_cb:
+                    progress_cb(f"file:{file_item.get('path')}", "API error", state="error")
+                return None
             logger.warning(f"[{req_id}] per-file analysis failed for {file_item.get('path')}: {exc}")
             if progress_cb:
                 progress_cb(f"file:{file_item.get('path')}", "Failed", state="error")
@@ -614,17 +650,20 @@ def call_model_for_aggregate(api_key: str,
                              progress_cb=None) -> Optional[Dict[str, Any]]:
     system_prompt = build_final_system_prompt()
     user_payload = build_final_user_payload(per_file_results, notes)
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Per-file findings:\n```json\n{user_payload}\n```"},
-    ]
     for attempt in range(1, PER_FILE_MAX_RETRIES + 1):
         try:
             if progress_cb:
                 progress_cb("aggregate", f"Synthesizing final report (attempt {attempt})")
             wait_for_rate_limit()
-            resp = call_openrouter(api_key, model, messages, temperature=temperature, timeout=timeout)
-            content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+            content = call_gemini_generate(
+                api_key=api_key,
+                model=model,
+                system_prompt=system_prompt,
+                user_content=f"Per-file findings:\n```json\n{user_payload}\n```",
+                temperature=temperature,
+                timeout=timeout,
+                max_output_tokens=8192,
+            )
             parsed = try_extract_json_block(content or "")
             if not parsed:
                 snippet = (content or "").strip()
@@ -635,28 +674,34 @@ def call_model_for_aggregate(api_key: str,
             if progress_cb:
                 progress_cb("aggregate", "Completed", state="success")
             return parsed
-        except RuntimeError as exc:
-            message = str(exc)
-            if "429" in message and attempt < PER_FILE_MAX_RETRIES:
-                wait_seconds = 8.0
-                reset_match = re.search(r"X-RateLimit-Reset['\":\s]+(\d+)", message)
-                if reset_match:
-                    try:
-                        reset_ms = int(reset_match.group(1))
-                        now_ms = int(time.time() * 1000)
-                        wait_seconds = max(6.0, (reset_ms - now_ms) / 1000.0)
-                    except Exception:
-                        wait_seconds = 8.0
-                if progress_cb:
-                    progress_cb("aggregate", f"Rate limited; retrying in {wait_seconds:.0f}s", state="waiting")
-                logger.warning(f"[{req_id}] aggregate 429 attempt {attempt}: {message}")
-                time.sleep(wait_seconds)
-                continue
-            logger.error(f"[{req_id}] aggregate analysis failed: {exc}")
-            if progress_cb:
-                progress_cb("aggregate", f"Failed: {exc}", state="error")
-            return None
         except Exception as exc:
+            if google_exceptions and isinstance(exc, google_exceptions.ResourceExhausted):
+                wait_seconds = 10.0
+                retry_delay = getattr(exc, "retry_delay", None)
+                if retry_delay:
+                    try:
+                        wait_seconds = max(wait_seconds, float(retry_delay.total_seconds()))  # type: ignore[arg-type]
+                    except Exception:
+                        try:
+                            wait_seconds = max(wait_seconds, float(retry_delay))
+                        except Exception:
+                            pass
+                if attempt < PER_FILE_MAX_RETRIES:
+                    if progress_cb:
+                        progress_cb("aggregate", f"Rate limited; retrying in {wait_seconds:.0f}s", state="waiting")
+                    logger.warning(f"[{req_id}] aggregate rate limit attempt {attempt}: {exc}")
+                    time.sleep(wait_seconds)
+                    continue
+            if isinstance(exc, RuntimeError):
+                logger.error(f"[{req_id}] aggregate analysis failed: {exc}")
+                if progress_cb:
+                    progress_cb("aggregate", f"Failed: {exc}", state="error")
+                return None
+            if google_exceptions and isinstance(exc, google_exceptions.GoogleAPIError):
+                logger.error(f"[{req_id}] aggregate Gemini API error: {exc}")
+                if progress_cb:
+                    progress_cb("aggregate", f"API error: {exc}", state="error")
+                return None
             logger.error(f"[{req_id}] aggregate analysis failed: {exc}")
             if progress_cb:
                 progress_cb("aggregate", f"Failed: {exc}", state="error")
@@ -682,7 +727,8 @@ def perform_analysis_job(req_id: str,
     aggregate_json: Optional[Dict[str, Any]] = None
     try:
         if not api_key:
-            raise RuntimeError("Missing OpenRouter API key.")
+            raise RuntimeError("Missing Gemini API key.")
+        ensure_gemini_client(api_key)
         if zip_path:
             try:
                 with zipfile.ZipFile(zip_path) as zf:
@@ -729,7 +775,7 @@ def perform_analysis_job(req_id: str,
                 "grouped_findings": {label: [] for label in SEVERITY_LABELS},
                 "other_findings": [],
                 "total_findings": 0,
-                "status_message": "Dry run mode: OpenRouter call skipped before contacting the model.",
+                "status_message": "Dry run mode: Gemini call skipped before contacting the model.",
                 "debug_mode": debug_mode,
             }
             complete_job(req_id, context)
@@ -1165,25 +1211,72 @@ def build_final_user_payload(per_file_results: List[Dict[str, Any]], notes: str)
     return json.dumps(payload, indent=2)
 
 
-def call_openrouter(api_key: str, model: str, messages: List[Dict], temperature: float = 0.2, timeout: int = 120) -> Dict:
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}",
-        "X-Title": "VulnSherif",
-        "HTTP-Referer": "http://localhost"
-    }
-    payload = {
-        "model": model,
-        "messages": messages,
+def _response_text_from_gemini(response: Any) -> str:
+    if response is None:
+        return ""
+    text = getattr(response, "text", None)
+    if text:
+        return text
+    parts: List[str] = []
+    for candidate in getattr(response, "candidates", []) or []:
+        content = getattr(candidate, "content", None)
+        if not content:
+            continue
+        candidate_parts = getattr(content, "parts", None)
+        if candidate_parts is None:
+            # to_dict fallback
+            try:
+                candidate_dict = candidate.to_dict()  # type: ignore[attr-defined]
+                for part in candidate_dict.get("content", {}).get("parts", []):
+                    value = part.get("text") or part.get("stringValue")
+                    if value:
+                        parts.append(value)
+                continue
+            except Exception:
+                continue
+        for part in candidate_parts:
+            value = getattr(part, "text", None) or getattr(part, "string_value", None)
+            if value:
+                parts.append(value)
+    return "\n".join(parts).strip()
+
+
+def call_gemini_generate(api_key: str,
+                         model: str,
+                         system_prompt: str,
+                         user_content: str,
+                         temperature: float = 0.2,
+                         timeout: int = 120,
+                         max_output_tokens: int = 4096) -> str:
+    ensure_gemini_client(api_key)
+    generation_config = {
         "temperature": temperature,
+        "max_output_tokens": max_output_tokens,
     }
-    redacted_headers = {k: ("Bearer ****" if k.lower() == "authorization" else v) for k, v in headers.items()}
-    logger.debug(f"Calling OpenRouter url={OPENROUTER_API_URL} model={model} temp={temperature} headers={redacted_headers}")
-    resp = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, timeout=timeout)
-    logger.debug(f"OpenRouter status={resp.status_code} bytes={len(resp.content)}")
-    if resp.status_code != 200:
-        raise RuntimeError(f"OpenRouter API error {resp.status_code}: {resp.text}")
-    return resp.json()
+    model_instance = genai.GenerativeModel(
+        model_name=model,
+        system_instruction=system_prompt,
+    )
+    request_options = {"timeout": timeout}
+    try:
+        response = model_instance.generate_content(
+            [{"role": "user", "parts": [user_content]}],
+            generation_config=generation_config,
+            request_options=request_options,
+        )
+    except TypeError:
+        # Older SDK versions may not support request_options
+        response = model_instance.generate_content(
+            [{"role": "user", "parts": [user_content]}],
+            generation_config=generation_config,
+        )
+    feedback = getattr(response, "prompt_feedback", None)
+    if feedback and getattr(feedback, "block_reason", None):
+        raise RuntimeError(f"Gemini blocked the request: {feedback.block_reason}")
+    text = _response_text_from_gemini(response)
+    if not text:
+        raise RuntimeError("Gemini returned an empty response.")
+    return text
 
 
 def _extract_first_json_object(text: str) -> Optional[str]:
@@ -1313,7 +1406,7 @@ def index():
 
 @app.post("/analyze")
 def analyze():
-    api_key = app.config.get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY", "")
+    api_key = app.config.get(API_KEY_ENV_VAR) or os.getenv(API_KEY_ENV_VAR, "")
     model = FORCED_MODEL
     notes = request.form.get("notes") or ""
     temperature = DEFAULT_TEMPERATURE
@@ -1323,7 +1416,15 @@ def analyze():
     dry_run = bool(request.form.get("dry_run"))
     file = request.files.get("zip_file")
     if not api_key:
-        flash("Missing OpenRouter API key.", "error")
+        flash("Missing Gemini API key.", "error")
+        return redirect(url_for("index"))
+    try:
+        ensure_gemini_client(api_key)
+        app.config[API_KEY_ENV_VAR] = api_key
+        os.environ[API_KEY_ENV_VAR] = api_key
+    except Exception as exc:
+        flash(f"Gemini client initialization failed: {exc}", "error")
+        logger.error(f"Gemini client initialization failed: {exc}")
         return redirect(url_for("index"))
     if (not file or file.filename == "") and not prompt_only and not notes.strip():
         flash("Upload a ZIP or enter notes (prompt-only).", "error")
