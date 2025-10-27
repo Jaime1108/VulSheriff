@@ -66,11 +66,10 @@ https://localhost:5000
 ```
 git clone https://github.com/your-username/VulSheriff.git
 cd VulSheriff
-## 👥 Meet the Team
-## 🤠 The Sheriff's Posse
+##  🤠 Meet Our Team
 
 | Name | Role | GitHub |
 | :--- | :--- | :--- |
 | **[James]** | Frontend, DevOps & Backend Support | [@Jaime1108](https://github.com/Jaime1108) |
 | **[Holton]** | Optimizer, Backend & API Integration | [@Holton-S](https://github.com/Holton-S) |
-| **[Ash]** | Project Design, Backend, Prompt Engineering & QA | [@Ashley-Hernandez](https://github.com/Ashley-Hernandez) |
+| **[Ash]** | Main Theme Designer, Frontend, Prompt Engineering & QA | [@Ashley-Hernandez](https://github.com/Ashley-Hernandez) |
