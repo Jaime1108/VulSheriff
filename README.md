@@ -28,12 +28,11 @@ The goal of the project is to **teach, detect, and visualize** common web vulner
 
 | Layer | Technology |
 |:------|:------------|
-| **Frontend** | HTML5, TailwindCSS / Bootstrap, Jinja2 Templates |
+| **Frontend** | HTML5, TailwindCSS & Bootstrap & Vanilla CSS,JavaScript, Jinja2 Templates |
 | **Backend** | Flask (Python 3) |
-| **Database** | SQLite / MySQL |
-| **AI Integration** | Llama / OpenAI API |
-| **Security Tools** | `nmap`, custom Python scripts, regex-based vulnerability detection |
-| **Environment** | VirtualBox + Kali Linux (for ethical testing) |
+| **AI Integration** | GEMINI 2.5 Pro |
+| **Security Tools** | `nmap`, custom Python scripts, regex-based vulnerability detection, prompt engineer to prevent injection |
+| **Deployment** | Vultr Cloud Environment |
 
 ---
 
@@ -67,3 +66,11 @@ https://localhost:5000
 ```
 git clone https://github.com/your-username/VulSheriff.git
 cd VulSheriff
+## 👥 Meet the Team
+## 🤠 The Sheriff's Posse
+
+| Name | Role | GitHub |
+| :--- | :--- | :--- |
+| **[James]** | Frontend, DevOps & Backend Support | [@Jaime1108](https://github.com/Jaime1108) |
+| **[Holton]** | Optimizer, Backend & API Integration | [@Holton-S](https://github.com/Holton-S) |
+| **[Ash]** | Project Design, Backend, Prompt Engineering & QA | [@Ashley-Hernandez](https://github.com/Ashley-Hernandez) |
