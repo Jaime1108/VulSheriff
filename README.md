@@ -31,7 +31,7 @@ The goal of the project is to **teach, detect, and visualize** common web vulner
 | **Frontend** | HTML5, TailwindCSS & Bootstrap & Vanilla CSS,JavaScript, Jinja2 Templates |
 | **Backend** | Flask (Python 3) |
 | **AI Integration** | GEMINI 2.5 Pro |
-| **Security Tools** | `nmap`, custom Python scripts, regex-based vulnerability detection, prompt engineer to prevent injection |
+| **Security Tools** | Custom Python scripts, Prompt engineer to prevent injection, Bash Script to handle redeployment on failure |
 | **Deployment** | Vultr Cloud Environment |
 
 ---
