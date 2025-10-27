@@ -7,7 +7,7 @@ The goal of the project is to **teach, detect, and visualize** common web vulner
 
 ## 🔥 Features
 
-- 🔍 **Automated Vulnerability Scanning**  
+- 🔍 **Vulnerability Scanning in file content**  
   Detects common web vulnerabilities including SQL Injection, Cross-Site Scripting (XSS), broken authentication, and insecure admin portals.
 
 - 🤖 **AI-Powered Code Auditor**  
