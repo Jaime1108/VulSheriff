@@ -1,5 +1,5 @@
 # 🤠 Site Sheriff — Ethical Web Vulnerability Scanner
-
+🏆 **Best Gemini API Project for RowdyHack!** 🏆
 **Site Sheriff** is an educational and interactive web-based vulnerability scanner designed to simulate real-world web security testing in a safe, ethical environment.  
 The goal of the project is to **teach, detect, and visualize** common web vulnerabilities such as SQL injection, XSS, and weak authentication while promoting **ethical hacking** and **secure coding practices**.
 
