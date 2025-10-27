@@ -47,20 +47,17 @@ cd VulSheriff
 ```bash
 python -m venv venv
 source venv/bin/activate     # On Windows use: venv\Scripts\activate
-```
-### 3. Install dependencies
-```bash
 pip install -r requirements.txt
 ```
-### 4. Configuring the environment
+### 3. Configuring the environment
 ```bash
 GEMINI_API_KEY=your_api_key_here
 ```
-### 5. Run the Flask application
+### 4. Run the Flask application
 ```bash
 python main.py
 ```
-### 6. Visit the app
+### 5. Visit the app
 ```
 https://localhost:5000
 ```
