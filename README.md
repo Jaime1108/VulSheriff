@@ -61,8 +61,8 @@ python main.py
 ```
 https://localhost:5000
 ```
-git clone https://github.com/your-username/VulSheriff.git
-cd VulSheriff
+
+
 ---
 ##  🤠 Meet Our Team
 
