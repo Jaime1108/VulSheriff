@@ -40,8 +40,8 @@ The goal of the project is to **teach, detect, and visualize** common web vulner
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/your-username/VulSheriff.git
-cd VulSheriff
+git clone https://github.com/Jaime1108/SiteSheriff.git
+cd SiteSheriff
 ```
 ### 2. Install Dependencies
 ```bash
@@ -50,6 +50,7 @@ source venv/bin/activate     # On Windows use: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 ### 3. Configuring the environment
+Create a .env file to store the api key
 ```bash
 GEMINI_API_KEY=your_api_key_here
 ```
